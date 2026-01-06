@@ -10,11 +10,10 @@ import re
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Lãi Suất Ngân Hàng", layout="wide")
 
-# [QUAN TRỌNG] Đổi tiêu đề để biết code mới đã chạy chưa
-st.title("✅ ĐÃ SỬA LỖI: LÃI SUẤT NGÂN HÀNG") 
+# [QUAN TRỌNG] Đổi tiêu đề để xác nhận code mới đã chạy
+st.title("✅ ĐÃ SỬA LỖI (V3): LÃI SUẤT NGÂN HÀNG") 
 
 # --- KẾT NỐI GOOGLE SHEET ---
-# [QUAN TRỌNG] Đã xóa @st.cache_data để ép tải lại mới 100%
 def load_data():
     # 1. Kết nối
     if os.path.exists('key.json'):
@@ -59,8 +58,8 @@ def load_data():
     return df
 
 try:
-    with st.spinner('Đang tải dữ liệu mới...'):
-        df = load_data()
+    # Bỏ st.spinner cũ để tránh cache, gọi hàm trực tiếp
+    df = load_data()
 
     # Hiển thị ngày cập nhật
     if 'NgayCapNhat' in df.columns:
@@ -84,12 +83,12 @@ try:
             )
             
             fig.update_traces(texttemplate='%{y:.2f}%', textposition='outside')
-            # Set cứng trục Y tối đa là 20 để biểu đồ không bị cột 585 làm hỏng
+            # Set cứng trục Y tối đa là 15 để ép biểu đồ hiển thị đúng
             fig.update_layout(height=500, yaxis_range=[0, 15], yaxis_title="Lãi suất (%)")
             
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.expander("Kiểm tra bảng số liệu"):
+            with st.expander("Kiểm tra bảng số liệu (Đã xử lý)"):
                 st.dataframe(df)
 
 except Exception as e:
