@@ -1,0 +1,28 @@
+name: Daily Bot Run
+
+on:
+  schedule:
+    # 10h sáng VN = 3h sáng Quốc tế (UTC)
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Để ông có thể bấm chạy thử thủ công nếu muốn
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install libraries
+        run: |
+          pip install pandas requests gspread oauth2client plotly streamlit
+
+      - name: Run Bot
+        env:
+          G_SHEET_CREDS: ${{ secrets.G_SHEET_CREDS }}
+        run: python daily_bot.py
