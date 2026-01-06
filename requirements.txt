@@ -1,0 +1,8 @@
+pandas
+requests
+gspread
+oauth2client
+lxml
+html5lib
+streamlit
+plotly
