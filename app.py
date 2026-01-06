@@ -8,57 +8,58 @@ import json
 import re
 
 # --- CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Lãi Suất Ngân Hàng", layout="wide")
+st.set_page_config(page_title="Lãi Suất", layout="wide")
 
-# [QUAN TRỌNG] Đổi tiêu đề để xác nhận code mới đã chạy
-st.title("✅ ĐÃ SỬA LỖI (V3): LÃI SUẤT NGÂN HÀNG") 
+# [QUAN TRỌNG] Đổi tiêu đề để ông biết chắc chắn code mới đã chạy
+st.title("✅ BẢN SỬA LỖI VĨNH VIỄN (V4)") 
 
-# --- KẾT NỐI GOOGLE SHEET ---
+# --- HÀM XỬ LÝ SỐ "CỤC SÚC" ---
+def fix_so_lieu(val):
+    s = str(val)
+    if not s: return 0.0
+    
+    # Thay dấu phẩy thành dấu chấm ngay lập tức
+    s = s.replace(',', '.')
+    
+    try:
+        # Lấy số ra
+        match = re.search(r"(\d+\.?\d*)", s)
+        if match:
+            num = float(match.group(1))
+            
+            # VÒNG LẶP CHIA 10
+            # Nếu số lớn hơn 25 (VD: 585), chia cho 10 đến khi nào nhỏ hơn 25 thì thôi
+            while num > 25:
+                num = num / 10
+            return num
+        return 0.0
+    except: return 0.0
+
+# --- KẾT NỐI VÀ LẤY DATA ---
 def load_data():
-    # 1. Kết nối
+    # Kết nối Google Sheet
     if os.path.exists('key.json'):
         creds = ServiceAccountCredentials.from_json_keyfile_name('key.json', ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
     else:
+        # Lấy key từ Secrets trên Cloud
         key_content = json.loads(os.environ['G_SHEET_CREDS'])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_content, ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
         
     client = gspread.authorize(creds)
     sheet = client.open("LaiSuatNganHang").sheet1
-    
-    # 2. Lấy dữ liệu
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
-    
-    # 3. BỘ LỌC XỬ LÝ SỐ (VÒNG LẶP CHIA 10)
-    def fix_loi_so_vn(val):
-        s = str(val)
-        if not s: return 0.0
-        
-        # Thay dấu phẩy thành dấu chấm ngay lập tức
-        s = s.replace(',', '.')
-        
-        try:
-            match = re.search(r"(\d+\.?\d*)", s)
-            if match:
-                num = float(match.group(1))
-                
-                # NẾU SỐ LỚN HƠN 25 -> CHIA 10 LIÊN TỤC
-                # Ví dụ: 585 -> 58.5 -> 5.85
-                while num > 25:
-                    num = num / 10
-                return num
-            return 0.0
-        except: return 0.0
 
-    # Áp dụng bộ lọc cho tất cả các cột
+    # --- ÉP SỐ LIỆU NGAY TẠI ĐÂY ---
+    # Chạy vòng lặp sửa lỗi cho tất cả các cột lãi suất
     for col in df.columns:
         if col not in ["Ngân hàng", "NgayCapNhat"]:
-            df[col] = df[col].apply(fix_loi_so_vn)
+            df[col] = df[col].apply(fix_so_lieu)
             
     return df
 
 try:
-    # Bỏ st.spinner cũ để tránh cache, gọi hàm trực tiếp
+    # Gọi hàm lấy dữ liệu (Không dùng cache để bắt buộc lấy mới)
     df = load_data()
 
     # Hiển thị ngày cập nhật
@@ -73,6 +74,7 @@ try:
         if ky_han:
             df_sort = df.sort_values(by=ky_han, ascending=False)
             
+            # Vẽ lại biểu đồ
             fig = px.bar(
                 df_sort, 
                 x='Ngân hàng', 
@@ -83,13 +85,14 @@ try:
             )
             
             fig.update_traces(texttemplate='%{y:.2f}%', textposition='outside')
-            # Set cứng trục Y tối đa là 15 để ép biểu đồ hiển thị đúng
+            # Khóa cứng chiều cao trục Y là 15% để cột 585 không phá vỡ biểu đồ
             fig.update_layout(height=500, yaxis_range=[0, 15], yaxis_title="Lãi suất (%)")
             
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.expander("Kiểm tra bảng số liệu (Đã xử lý)"):
+            # Hiện bảng check
+            with st.expander("Bảng số liệu đã xử lý"):
                 st.dataframe(df)
 
 except Exception as e:
-    st.error(f"Lỗi: {e}")
+    st.error(f"Lỗi rồi: {e}")
