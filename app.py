@@ -5,16 +5,16 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 import json
+import re
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Lãi Suất Ngân Hàng", layout="wide")
-
 st.title("💰 LÃI SUẤT NGÂN HÀNG HÔM NAY")
 
 # --- KẾT NỐI GOOGLE SHEET ---
-@st.cache_data(ttl=600) # Tự động làm mới sau 10 phút
+@st.cache_data(ttl=600)
 def load_data():
-    # Kiểm tra xem đang chạy trên máy hay trên GitHub
+    # Kết nối
     if os.path.exists('key.json'):
         creds = ServiceAccountCredentials.from_json_keyfile_name('key.json', ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
     else:
@@ -23,12 +23,41 @@ def load_data():
         
     client = gspread.authorize(creds)
     sheet = client.open("LaiSuatNganHang").sheet1
+    
+    # Lấy dữ liệu thô
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
+    
+    # --- [QUAN TRỌNG] BỘ LỌC DỮ LIỆU TẠI CHỖ ---
+    # Nhiệm vụ: Dù Sheet ghi là "5,85" hay "585", Web cũng sẽ đưa về 5.85
+    def xu_ly_so_hien_thi(val):
+        val = str(val) # Chuyển thành chữ trước
+        val = val.replace(',', '.') # Thay phẩy thành chấm
+        try:
+            # Lấy số ra
+            match = re.search(r"(\d+\.?\d*)", val)
+            if match:
+                num = float(match.group(1))
+                
+                # THUẬT TOÁN ÉP SỐ:
+                # Nếu số > 20 (Vô lý), tự động chia 10 dần dần cho đến khi về đúng
+                # Ví dụ: 585 -> 58.5 -> 5.85 (Dừng)
+                while num > 20:
+                    num = num / 10
+                
+                return num
+            return 0.0
+        except: return 0.0
+
+    # Áp dụng bộ lọc này cho tất cả các cột lãi suất
+    for col in df.columns:
+        if col != "Ngân hàng" and col != "NgayCapNhat":
+            df[col] = df[col].apply(xu_ly_so_hien_thi)
+            
     return df
 
 try:
-    with st.spinner('Đang tải dữ liệu mới nhất...'):
+    with st.spinner('Đang tải dữ liệu...'):
         df = load_data()
 
     # Hiển thị thời gian cập nhật
@@ -38,33 +67,33 @@ try:
 
     # --- BỘ LỌC KỲ HẠN ---
     ds_ky_han = [col for col in df.columns if 'tháng' in col]
-    ky_han = st.selectbox("Chọn kỳ hạn bạn muốn xem:", ds_ky_han, index=3) # Mặc định chọn 12 tháng
+    ky_han = st.selectbox("Chọn kỳ hạn:", ds_ky_han, index=3)
 
     # --- VẼ BIỂU ĐỒ ---
     if ky_han:
-        # Sắp xếp dữ liệu từ cao xuống thấp để biểu đồ đẹp
-        # Lưu ý: Data giờ là số chuẩn rồi, không cần convert nữa
+        # Sắp xếp
         df_sort = df.sort_values(by=ky_han, ascending=False)
 
-        # Vẽ biểu đồ cột
+        # Tiêu đề biểu đồ
+        st.subheader(f"Lãi suất {ky_han} (%)")
+
+        # Vẽ biểu đồ
         fig = px.bar(
             df_sort, 
             x='Ngân hàng', 
             y=ky_han,
-            title=f"Bảng xếp hạng lãi suất {ky_han}",
-            text_auto='.2f', # Hiển thị 2 số sau dấu phẩy trên cột
-            color=ky_han,    # Tô màu theo độ cao thấp
-            color_continuous_scale='Greens' # Màu xanh lá cây (màu tiền)
+            text_auto='.2f',
+            color=ky_han,
+            color_continuous_scale='Greens'
         )
 
-        # Tinh chỉnh biểu đồ cho đẹp
         fig.update_layout(
             xaxis_title="Ngân hàng",
-            yaxis_title="Lãi suất (%/năm)",
+            yaxis_title=None, # Ẩn chữ trục dọc cho gọn
             height=500
         )
         
-        # Thêm dấu % vào con số hiển thị
+        # Thêm dấu %
         fig.update_traces(
             texttemplate='%{y:.2f}%', 
             textposition='outside'
@@ -72,10 +101,9 @@ try:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- HIỂN THỊ BẢNG DỮ LIỆU ---
-    with st.expander("Xem bảng chi tiết"):
+    # --- BẢNG DỮ LIỆU ---
+    with st.expander("Xem bảng số liệu chi tiết"):
         st.dataframe(df)
 
 except Exception as e:
-    st.error(f"Có lỗi xảy ra: {e}")
-    st.info("Mẹo: Thử bấm menu 3 chấm góc phải -> Clear Cache rồi tải lại trang nhé!")
+    st.error(f"Lỗi: {e}")
