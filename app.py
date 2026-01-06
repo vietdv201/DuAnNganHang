@@ -40,7 +40,7 @@ def load_data():
             match = re.search(r"(\d+\.?\d*)", s)
             if match:
                 num = float(match.group(1))
-                while num > 25: # Logic chia 10
+                while num > 13: # Logic chia 10
                     num = num / 10
                 return num
             return 0.0
